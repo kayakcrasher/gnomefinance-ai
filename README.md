@@ -1,34 +1,21 @@
-
 # GnomeFinance AI Analyst
 
-LLM-powered market analysis with RAG, tool calling, and evaluation.
+An LLM-powered market analyst that combines **retrieval-augmented generation**, **tool-calling agents**, and **structured output** to answer questions about stocks, SEC filings, and market data.
 
-## Demo
-[GIF of asking "Compare NVDA and AMD momentum" → structured analysis]
+Ask it `"How has NVDA performed this month and is it overbought?"` and it will:
+1. Decide to call `get_price` and `compute_indicator` on its own
+2. Fetch live market data via yfinance
+3. Synthesize a factual answer with the numbers it retrieved
 
-## Architecture
-[Diagram]
+Ask it `"What did NVDA's 10-K say about data center revenue?"` and it will:
+1. Retrieve relevant chunks from an ingested SEC filing
+2. Call Gemini with strict JSON schema enforcement
+3. Return a structured analysis with citations
 
-## Key Features
-- RAG over SEC filings, news, earnings transcripts
-- Tool calling: live prices, technical indicators, financials
-- Structured outputs with citations
-- Evaluation harness (retrieval, faithfulness, tool accuracy)
-- Streaming responses, cost tracking, guardrails
+## Stack
 
-## Eval Results
-| Metric | Score |
-|--------|-------|
-| Retrieval Hit Rate | 0.87 |
-| Faithfulness | 0.92 |
-| Tool Accuracy | 0.89 |
-| Avg Latency | 3.2s |
-| Avg Cost/Query | $0.004 |
-
-## Quick Start
-docker compose up
-
-## What I Learned
-- Chunking strategy matters more than model choice for RAG
-- Tool calling accuracy improves with few-shot examples in system prompt
-- Evaluation is the hardest part — built custom metrics for financial domain
+- **FastAPI** — HTTP API
+- **Google Gemini** (`google-genai`) — chat + embeddings
+- **SQLite + JSON vectors** — local storage for RAG
+- **yfinance** — live market data
+- **Python 3.14** on Termux/proot (aarch64)

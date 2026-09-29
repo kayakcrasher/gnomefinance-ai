@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 from google import genai
@@ -10,10 +11,8 @@ from app.tools.market import compute_indicator, get_price
 log = logging.getLogger("gnomefinance.agent")
 
 _client = None
-MODEL_CHAIN = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash"]
+MODEL_CHAIN = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"]
 MAX_STEPS = 5
-MAX_RETRIES = 3
-BACKOFF = 2.0
 
 
 def _get_client() -> genai.Client:
@@ -64,26 +63,41 @@ When asked about a stock's price action or technicals, USE THE TOOLS rather than
 After gathering data, summarize clearly. Be concise and factual."""
 
 
+def _sleep_for(err: Exception) -> float:
+    """Extract retryDelay from 429 error if present, else default."""
+    m = re.search(r"retry in (\d+(?:\.\d+)?)s", str(err))
+    if m:
+        return min(float(m.group(1)) + 1.0, 15.0)
+    return 3.0
+
+
 def _generate_with_retry(contents):
     client = _get_client()
     last_err = None
+
     for model in MODEL_CHAIN:
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                return client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM,
-                        tools=TOOL_DECLS,
-                        temperature=0.2,
-                    ),
-                )
-            except Exception as e:
-                log.warning("model=%s attempt=%d failed: %s", model, attempt, e)
-                last_err = e
-                if attempt < MAX_RETRIES:
-                    time.sleep(BACKOFF * attempt)
+        try:
+            return client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM,
+                    tools=TOOL_DECLS,
+                    temperature=0.2,
+                ),
+            )
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                wait = _sleep_for(e)
+                log.warning("model=%s rate limited, waiting %.1fs then next model", model, wait)
+                time.sleep(wait)
+            elif "404" in msg or "NOT_FOUND" in msg:
+                log.warning("model=%s unavailable, trying next", model)
+            else:
+                log.warning("model=%s error: %s", model, e)
+            last_err = e
+
     raise RuntimeError(f"All models failed. Last error: {last_err}")
 
 

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GnomeFinance AI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0b0d10; color: #e6e8eb;
+    min-height: 100vh; padding: 16px;
+  }
+  .container { max-width: 780px; margin: 0 auto; }
+  header { padding: 8px 0 20px; border-bottom: 1px solid #1e2227; margin-bottom: 20px; }
+  header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+  header p { color: #8a929c; font-size: 13px; margin-top: 4px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto; }
+  .tab {
+    padding: 8px 14px; border-radius: 8px; background: #14181d;
+    border: 1px solid #1e2227; color: #b8bec7; cursor: pointer;
+    font-size: 13px; white-space: nowrap; transition: all 0.15s;
+  }
+  .tab.active { background: #1d2530; color: #fff; border-color: #2d3744; }
+  textarea, input {
+    width: 100%; padding: 12px 14px; border-radius: 10px;
+    background: #14181d; border: 1px solid #1e2227; color: #e6e8eb;
+    font-size: 15px; font-family: inherit; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: none; border-color: #3a4a5c; }
+  button {
+    padding: 12px 20px; border-radius: 10px; background: #2563eb;
+    color: #fff; border: none; font-size: 15px; font-weight: 500;
+    cursor: pointer; width: 100%; margin-top: 10px;
+  }
+  button:disabled { background: #1e3a6b; cursor: wait; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 13px; color: #8a929c; margin-bottom: 6px; }
+  .result { margin-top: 20px; padding: 16px; background: #0f1318; border-radius: 12px; border: 1px solid #1a1f26; }
+  .result h3 { font-size: 14px; color: #8a929c; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .answer { line-height: 1.6; white-space: pre-wrap; font-size: 15px; }
+  .trace-step {
+    padding: 12px; background: #14181d; border-radius: 8px;
+    margin-bottom: 8px; border-left: 3px solid #2563eb;
+  }
+  .trace-step .tool-name { font-family: monospace; color: #60a5fa; font-size: 13px; margin-bottom: 6px; }
+  .trace-step pre { font-size: 12px; color: #b8bec7; overflow-x: auto; margin: 4px 0; }
+  .hit { padding: 12px; background: #14181d; border-radius: 8px; margin-bottom: 8px; }
+  .hit .score { font-size: 12px; color: #60a5fa; margin-bottom: 6px; font-family: monospace; }
+  .hit .content { font-size: 14px; line-height: 1.5; color: #c8ced6; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: #1e3a6b; color: #93c5fd; font-size: 12px; margin-right: 6px; }
+  .error { color: #f87171; }
+  .loading { color: #8a929c; font-style: italic; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🦉 GnomeFinance AI</h1>
+    <p>RAG + tool-calling agent for market analysis</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="agent">Agent</div>
+    <div class="tab" data-tab="analyze">Analyze</div>
+    <div class="tab" data-tab="retrieve">Retrieve</div>
+    <div class="tab" data-tab="ingest">Ingest</div>
+  </div>
+
+  <div id="panel-agent" class="panel">
+    <div class="form-group">
+      <label>Ask the agent (it will call tools on its own)</label>
+      <textarea id="agent-query" rows="3" placeholder="How has NVDA performed this month and is it overbought?"></textarea>
+    </div>
+    <button onclick="runAgent()">Run Agent</button>
+  </div>
+
+  <div id="panel-analyze" class="panel hidden">
+    <div class="form-group">
+      <label>Ask about ingested documents</label>
+      <textarea id="analyze-query" rows="3" placeholder="What are NVIDIA's main risk factors?"></textarea>
+    </div>
+    <button onclick="runAnalyze()">Analyze</button>
+  </div>
+
+  <div id="panel-retrieve" class="panel hidden">
+    <div class="form-group">
+      <label>Vector search query</label>
+      <input id="retrieve-query" placeholder="NVIDIA data center revenue">
+    </div>
+    <button onclick="runRetrieve()">Retrieve</button>
+  </div>
+
+  <div id="panel-ingest" class="panel hidden">
+    <div class="form-group">
+      <label>Text to ingest</label>
+      <textarea id="ingest-content" rows="4" placeholder="Paste a filing excerpt, news article, or notes..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Ticker (optional)</label>
+      <input id="ingest-ticker" placeholder="NVDA">
+    </div>
+    <button onclick="runIngest()">Ingest</button>
+  </div>
+
+  <div id="result" class="hidden"></div>
+</div>
+
+<script>
+const API = '';
+const resultEl = document.getElementById('result');
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.remove('hidden');
+    resultEl.classList.add('hidden');
+  });
+});
+
+function showLoading(label) {
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = '<div class="result"><p class="loading">' + label + '...</p></div>';
+}
+
+function showError(msg) {
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = '<div class="result"><h3>Error</h3><p class="error">' + escapeHtml(msg) + '</p></div>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function post(path, body) {
+  const r = await fetch(API + path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(r.status + ': ' + text.slice(0, 300));
+  }
+  return r.json();
+}
+
+async function runAgent() {
+  const query = document.getElementById('agent-query').value.trim();
+  if (!query) return;
+  showLoading('Running agent');
+  try {
+    const data = await post('/agent', {query});
+    let html = '<div class="result"><h3>Answer</h3><div class="answer">' + escapeHtml(data.answer) + '</div>';
+    if (data.trace && data.trace.length) {
+      html += '<h3 style="margin-top:16px">Tool Trace</h3>';
+      for (const s of data.trace) {
+        html += '<div class="trace-step"><div class="tool-name">' + escapeHtml(s.tool) + '</div>';
+        html += '<pre>args: ' + escapeHtml(JSON.stringify(s.args)) + '</pre>';
+        html += '<pre>result: ' + escapeHtml(JSON.stringify(s.result).slice(0, 400)) + '</pre></div>';
+      }
+    }
+    html += '</div>';
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = html;
+  } catch (e) { showError(e.message); }
+}
+
+async function runAnalyze() {
+  const query = document.getElementById('analyze-query').value.trim();
+  if (!query) return;
+  showLoading('Analyzing');
+  try {
+    const data = await post('/analyze', {query, top_k: 5});
+    let html = '<div class="result"><h3>Summary</h3><div class="answer">' + escapeHtml(data.summary) + '</div>';
+    if (data.key_points?.length) {
+      html += '<h3 style="margin-top:16px">Key Points</h3><ul>';
+      for (const p of data.key_points) html += '<li style="margin-left:20px;margin-bottom:6px;line-height:1.5">' + escapeHtml(p) + '</li>';
+      html += '</ul>';
+    }
+    if (data.risks?.length) {
+      html += '<h3 style="margin-top:16px">Risks</h3><ul>';
+      for (const r of data.risks) html += '<li style="margin-left:20px;margin-bottom:6px;line-height:1.5;color:#fca5a5">' + escapeHtml(r) + '</li>';
+      html += '</ul>';
+    }
+    if (data.citations?.length) {
+      html += '<h3 style="margin-top:16px">Citations</h3>';
+      for (const c of data.citations) {
+        html += '<div class="hit"><span class="badge">chunk ' + c.chunk_index + '</span><div class="content">' + escapeHtml(c.snippet) + '</div></div>';
+      }
+    }
+    html += '</div>';
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = html;
+  } catch (e) { showError(e.message); }
+}
+
+async function runRetrieve() {
+  const query = document.getElementById('retrieve-query').value.trim();
+  if (!query) return;
+  showLoading('Searching');
+  try {
+    const data = await post('/retrieve', {query, top_k: 5});
+    if (!data.hits?.length) { showError('No results. Ingest something first.'); return; }
+    let html = '<div class="result"><h3>' + data.hits.length + ' results</h3>';
+    for (const h of data.hits) {
+      html += '<div class="hit"><div class="score">score ' + h.score.toFixed(4) + ' · ' + escapeHtml(h.source) + '</div>';
+      html += '<div class="content">' + escapeHtml(h.content.slice(0, 400)) + '</div></div>';
+    }
+    html += '</div>';
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = html;
+  } catch (e) { showError(e.message); }
+}
+
+async function runIngest() {
+  const content = document.getElementById('ingest-content').value.trim();
+  const ticker = document.getElementById('ingest-ticker').value.trim() || null;
+  if (!content) return;
+  showLoading('Ingesting');
+  try {
+    const data = await post('/ingest/text', {source: 'ui', content, ticker});
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = '<div class="result"><h3>Ingested</h3><p class="answer">' + data.chunks_created + ' chunk(s) created.</p></div>';
+  } catch (e) { showError(e.message); }
+}
+</script>
+</body>
+</html>

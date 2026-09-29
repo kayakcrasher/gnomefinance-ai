@@ -1,6 +1,8 @@
 import logging
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.db import get_conn, init_db
@@ -79,9 +81,14 @@ def retrieve_endpoint(req: RetrieveRequest) -> RetrieveResponse:
     return RetrieveResponse(hits=[RetrieveHit(**h) for h in hits])
 
 
+STATIC_DIR = str(__import__("pathlib").Path(__file__).parent / "static")
+
 @app.get("/")
-def root() -> dict:
-    return {"name": "GnomeFinance AI Analyst", "docs": "/docs"}
+def root() -> FileResponse:
+    return FileResponse(STATIC_DIR + "/index.html")
+
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 

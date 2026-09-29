@@ -62,3 +62,18 @@ class AnalysisResponse(BaseModel):
     key_points: list[str]
     risks: list[str]
     citations: list[Citation]
+
+
+class AgentRequest(BaseModel):
+    query: str
+
+
+class AgentStep(BaseModel):
+    tool: str
+    args: dict
+    result: dict
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    trace: list[AgentStep]

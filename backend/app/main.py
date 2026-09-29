@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.config import settings
 from app.db import get_conn, init_db
+from app.agents.graph import run_agent
 from app.analyze import analyze
 from app.rag.ingest import ingest_edgar, ingest_text, ingest_url
 from app.rag.retrieve import retrieve
@@ -19,6 +20,9 @@ from app.schemas import (
     AnalysisRequest,
     AnalysisResponse,
     Citation,
+    AgentRequest,
+    AgentResponse,
+    AgentStep,
 )
 
 logging.basicConfig(level=settings.log_level)
@@ -91,3 +95,11 @@ def analyze_endpoint(req: AnalysisRequest) -> AnalysisResponse:
         risks=result.get("risks", []),
         citations=citations,
     )
+
+
+
+@app.post("/agent", response_model=AgentResponse)
+def agent_endpoint(req: AgentRequest) -> AgentResponse:
+    result = run_agent(req.query)
+    trace = [AgentStep(**s) for s in result.get("trace", [])]
+    return AgentResponse(answer=result.get("answer", ""), trace=trace)
